@@ -91,7 +91,7 @@ class TestSuite(unittest.TestCase):
          "first_name": "a", "last_name": "b"},
     ])
     def test_ok_score_request(self, arguments):
-        request = {"account": "horns&hoofs", "login": "h&f", "method": "online_score", "arguments": arguments}
+        request = {"account": "horns&hoofs", "login": "UUU", "method": "online_score", "arguments": arguments}
         self.set_valid_auth(request)
         response, code = self.get_response(request)
         self.assertEqual(api.OK, code, arguments)
