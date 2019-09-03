@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
+from weakref import WeakKeyDictionary
 import abc
 import json
 import datetime
@@ -8,7 +10,8 @@ import logging
 import hashlib
 import uuid
 from optparse import OptionParser
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from scoring import get_score, get_interests
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -36,44 +39,200 @@ GENDERS = {
 }
 
 
-class CharField(object):
-    pass
+class BaseData():
+    def __init__(self, required=False, nullable=False):
+        # print('__init__')
+        self.required = required
+        self.nullable = nullable
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        # print('__get__')
+        return self.data.get(instance)  # , self.default
+
+    def __set__(self, instance, value):
+        print('__set__')
+        value = self.validate(value)
+        self.data[instance] = value
+
+    def validate(self, value):
+        if self.required and value is None:
+            raise ValueError('value is required')
+        if not self.nullable and value in ['', None]:
+            raise ValueError('value cannot be nullable')
+
+        return value
 
 
-class ArgumentsField(object):
-    pass
+class CharField(BaseData):
+    def validate(self, value):
+        print('CharField__validate__')
+        value = super(CharField, self).validate(value)
+        if value is None:
+            return value
+        if value is not None and not isinstance(value, str):
+            raise ValueError('Char value must be str')
+
+        return value
 
 
-class EmailField(CharField):
-    pass
+class ArgumentsField(BaseData):
+    def validate(self, value):
+        print('ArgumentsField__validate__')
+        value = super(ArgumentsField, self).validate(value)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError('Arguments value must be dict')
+
+        return value
 
 
-class PhoneField(object):
-    pass
+class EmailField(BaseData):
+    def validate(self, value):
+        print('EmailField__validate__')
+        value = super(EmailField, self).validate(value)
+        if value is None:
+            return value
+        if not isinstance(value, str) or '@' not in value:
+            raise ValueError('Email value must be str and contain @')
+
+        return value
 
 
-class DateField(object):
-    pass
+class PhoneField(BaseData):
+    def validate(self, value):
+        print('PhoneField__validate__')
+        value = super(PhoneField, self).validate(value)
+        if value is None:
+            return value
+        value = str(value)
+        if not value.isdigit() or len(value) != 11 or value[0] != '7':
+            raise ValueError('Phone value contain only digits , startwith 7 and lenght 11 ')
+
+        return value
 
 
-class BirthDayField(object):
-    pass
+class DateField(BaseData):
+    def validate(self, value):
+        print('DateField__validate__')
+        value = super(DateField, self).validate(value)
+        if value is None:
+            return value
+
+        print(1+1)
+        try:
+            return datetime.datetime.strptime(value, "%d.%m.%Y")
+            #print(date)
+        except ValueError:
+            raise ValueError('Date value must have format like DD.MM.YYYY')
 
 
-class GenderField(object):
-    pass
+class BirthDayField(DateField):
+    def validate(self, value):
+        print('BirthDayField__validate__')
+        value = super(BirthDayField, self).validate(value)
+        if value is None:
+            return value
+        age = datetime.datetime.now() - value
+        if age.days / 365 > 70:
+            raise ValueError("age >  70")
+
+        return value
 
 
-class ClientIDsField(object):
-    pass
+class GenderField(BaseData):
+    def validate(self, value):
+        print('GenderField__validate__')
+        value = super(GenderField, self).validate(value)
+        if value is None:
+            return value
+
+        print(value)
+        print(type(value))
+        if value is not None and value not in [0, 1, 2]:  # not isinstance(value, int)
+            raise ValueError('Gender value must be in [0,1,2]')
+
+        return value
 
 
-class ClientsInterestsRequest(object):
+class ClientIDsField(BaseData):
+    def validate(self, value):
+        print('ClientIDsFieldd__validate__')
+        if self.required and value is None:
+            raise ValueError('value is required')
+        #         print(value)
+        #         print(type(value))
+        #         for i in value:
+        #             print(type(i))
+
+        if not isinstance(value, list):
+            raise ValueError('ClientID value must be list')
+        if not bool(list(filter(lambda x: isinstance(x, int), value))):
+            raise ValueError('ClientID values must be int')
+
+        return value
+
+
+##########################################################################################
+
+class MetaClassRequest(type):
+    def __init__(cls, name, bases, attrs):
+        super(MetaClassRequest, cls).__init__(name, bases, attrs)
+        cls.fields = []
+        for k, v in attrs.items():
+            if isinstance(v, BaseData):
+                v.name = k
+                cls.fields.append(v)
+
+
+class Request(metaclass=MetaClassRequest):
+    def __init__(self, request=None):
+        self.request = request
+        self.error_text = None
+        self.correct = True
+
+    def check_request(self):
+        return self.correct
+
+    def get_not_empty_fields(self):
+        not_empty_fields = []
+        for field in self.fields:
+            print(field)
+            print(field.name)
+            print(self.request)
+            if field.name in [ k for k , v in self.request.items() if v not in (None, '', [], (), {}) ]:    # (None, '', [], (), {})   # if field.name in self.request not in '':
+                not_empty_fields.append(field.name)
+        return not_empty_fields
+
+
+##########################################################################################
+
+
+class ClientsInterestsRequest(Request):
+    print('ClientsInterestsRequest')
     client_ids = ClientIDsField(required=True)
     date = DateField(required=False, nullable=True)
 
+    def __init__(self, client_ids = None, date = None):
+        kostbll = {'client_ids': client_ids, 'date': date}
+        super(ClientsInterestsRequest, self).__init__(kostbll)
+        try:
+            print('__init__ClientsInterestsRequest')
+            self.client_ids = client_ids
+            self.date = date
+            # print(self.fields)
+            for i in self.fields:
+                print(i)
+                print(i.name)
+        except ValueError as er:
+            print(er)
+            print('ВЫПАЛ ЭКСЕПТ_ClientsInterestsRequest')
+            self.error_text = str(er)
+            self.correct = False
 
-class OnlineScoreRequest(object):
+
+class OnlineScoreRequest(Request):
+    print('OnlineScoreRequest')
+
     first_name = CharField(required=False, nullable=True)
     last_name = CharField(required=False, nullable=True)
     email = EmailField(required=False, nullable=True)
@@ -81,31 +240,144 @@ class OnlineScoreRequest(object):
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
 
+    def __init__(self, first_name=None, last_name=None, email=None, phone=None, birthday=None, gender=None):
+        kostbll = {'first_name': first_name, 'last_name': last_name, 'email': email,
+                   'phone': phone, 'birthday': birthday, 'gender': gender}
+        super(OnlineScoreRequest, self).__init__(kostbll)
+        try:
+            print('__init__OnlineScoreRequest')
+            self.first_name = first_name
+            self.last_name = last_name
+            self.email = email
+            self.phone = phone
+            self.birthday = birthday
+            self.gender = gender
+        except ValueError as er:
+            print(er)
+            print('ВЫПАЛ ЭКСЕПТ_OnlineScoreRequest')
+            self.error_text = str(er)
+            self.correct = False
 
-class MethodRequest(object):
+    def check_request(self):
+        pairs = [('phone', 'email'), ('first_name', 'last_name'), ('gender', 'birthday')]
+        check_pairs = []
+        check_pairs.append(bool(self.phone and self.email))
+        check_pairs.append(bool(self.first_name and self.last_name))
+        check_pairs.append(bool(self.gender and self.birthday))
+        print(check_pairs)
+        if not any(check_pairs):
+            self.correct = False
+            self.error_text = 'incorrect data'
+        return self.correct
+
+
+class MethodRequest(Request):
     account = CharField(required=False, nullable=True)
     login = CharField(required=True, nullable=True)
     token = CharField(required=True, nullable=True)
     arguments = ArgumentsField(required=True, nullable=True)
     method = CharField(required=True, nullable=False)
 
+    def __init__(self, account=None, login=None, token=None, arguments=None,
+                 method=None):  # account, login, token, arguments ,method
+        kostbll = {'account': account, 'login': login, 'token': token, 'arguments': arguments, 'method': method}
+        super(MethodRequest, self).__init__(kostbll)
+        try:
+            print('__init__MethodRequest')
+            self.account = account
+            self.login = login
+            self.token = token
+            self.arguments = arguments
+            self.method = method
+        except ValueError as er:
+            print(er)
+            print('ВЫПАЛ ЭКСЕПТ_MethodRequest')
+            self.error_text = str(er)
+            self.correct = False
+
     @property
     def is_admin(self):
         return self.login == ADMIN_LOGIN
 
 
+#################################################################################################
+
+
 def check_auth(request):
     if request.is_admin:
-        digest = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
+        digest = hashlib.sha512(bytes(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT, "utf-8")).hexdigest()
     else:
-        digest = hashlib.sha512(request.account + request.login + SALT).hexdigest()
+        digest = hashlib.sha512(bytes(request.account + request.login + SALT, "utf-8")).hexdigest()
     if digest == request.token:
         return True
     return False
 
+# def check_auth(request):
+#     if request.is_admin:
+#         digest = hashlib.sha512(
+#             datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
+#     else:
+#         digest = hashlib.sha512(
+#             request.account + request.login + SALT).hexdigest()
+#     if digest == request.token:
+#         return True
+#     return False
+
+
+def process_OnlineScoreRequest(request, ctx, store):
+    print(request.arguments)
+    r = OnlineScoreRequest(**request.arguments)
+    if not r.check_request():
+        print(r.gender)
+        print("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+        return r.error_text, INVALID_REQUEST
+
+    if request.is_admin:
+        score = 42
+    else:
+        score = get_score(store, r.phone, r.email, r.birthday, r.gender, r.first_name, r.last_name)
+    ctx["has"] = r.get_not_empty_fields()
+    print('ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp')
+    return {"score": score}, OK
+
+
+def process_ClientsInterestsRequest(request, ctx, store):
+    print(request.arguments)
+    r = ClientsInterestsRequest(**request.arguments)
+    if not r.check_request():
+        print(r.client_ids, r.date)
+        print("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+        print(r.error_text, INVALID_REQUEST)
+
+        return r.error_text, INVALID_REQUEST
+
+    ctx["nclients"] = len(r.client_ids)
+    response_body = {cid: get_interests(store, cid) for cid in r.client_ids}
+    print('ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp')
+    print(response_body, OK)
+
+    return response_body, OK
+
 
 def method_handler(request, ctx, store):
-    response, code = None, None
+    print('----------------method_handler----------------')
+    print(request)
+    print(request['body'])
+    method_request = MethodRequest(**request['body'])
+
+    if not method_request.check_request():
+        return method_request.error_text, INVALID_REQUEST
+
+    if not check_auth(method_request):
+        return None, FORBIDDEN
+
+    if method_request.method == 'online_score':
+        response, code = process_OnlineScoreRequest(method_request, ctx, store)
+    elif method_request.method == 'clients_interests':
+        response, code = process_ClientsInterestsRequest(method_request, ctx, store)
+    else:
+        return 'unexpected method', INVALID_REQUEST
+
     return response, code
 
 
@@ -124,6 +396,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         request = None
         try:
             data_string = self.rfile.read(int(self.headers['Content-Length']))
+            data_string = data_string.decode("utf-8")
             request = json.loads(data_string)
         except:
             code = BAD_REQUEST
@@ -134,7 +407,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             if path in self.router:
                 try:
                     response, code = self.router[path]({"body": request, "headers": self.headers}, context, self.store)
-                except Exception, e:
+                except Exception as e:
                     logging.exception("Unexpected error: %s" % e)
                     code = INTERNAL_ERROR
             else:
