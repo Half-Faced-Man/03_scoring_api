@@ -37,6 +37,7 @@ GENDERS = {
     MALE: "male",
     FEMALE: "female",
 }
+# NULL_VALUES = ['', None, {}, [], ()]
 
 
 class BaseData():
@@ -53,9 +54,12 @@ class BaseData():
         self.data[instance] = value
 
     def validate(self, value):
+
+        #print('BaseData_valid')
+
         if self.required and value is None:
             raise ValueError('value is required')
-        if not self.nullable and value in ['', None]:
+        if not self.nullable and value is None:
             raise ValueError('value cannot be nullable')
 
         return value
@@ -97,9 +101,9 @@ class PhoneField(BaseData):
         value = super(PhoneField, self).validate(value)
         if value is None:
             return value
-        value = str(value)
-        if not value.isdigit() or len(value) != 11 or value[0] != '7':
-            raise ValueError('Phone value contain only digits , startwith 7 and lenght 11 ')
+        # value = str(value)
+        if not str(value).isdigit() or len(str(value)) != 11 or str(value)[0] != '7':
+            raise ValueError('Phone value contain only digits ,startwith 7 and lenght 11 ')
 
         return value
 
@@ -142,12 +146,12 @@ class GenderField(BaseData):
 
 class ClientIDsField(BaseData):
     def validate(self, value):
-        if self.required and value is None:
+        if self.required and value in [None, []]:
             raise ValueError('value is required')
 
         if not isinstance(value, list):
             raise ValueError('ClientID value must be list')
-        if not bool(list(filter(lambda x: isinstance(x, int), value))):
+        if not all(isinstance(i, int) for i in value):
             raise ValueError('ClientID values must be int')
 
         return value
@@ -173,7 +177,6 @@ class Request(metaclass=MetaClassRequest):
 
     def check_request(self):
         return self.correct
-
 
     def get_not_empty_fields(self):
         not_empty_fields = [k.name for k in self.fields if getattr(self, k.name) is not None]
