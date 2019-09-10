@@ -12,6 +12,7 @@ import uuid
 from optparse import OptionParser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from scoring import get_score, get_interests
+import store
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"

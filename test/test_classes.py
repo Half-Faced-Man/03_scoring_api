@@ -24,18 +24,6 @@ def cases(cases):
 
 class TestBaseData(unittest.TestCase):
 
-    # @cases(['first_test', 23, None, ''])
-    # def test_valid_init(self, value):
-    #     print('TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT')
-    #     bd = api.BaseData()
-    #     print(bd)
-    #     print(type(bd))
-    #     bd.__set__(bd, value)
-    #     print(bd)
-    #     print(type(bd))
-    #     print( bd.__get__(bd, api.BaseData()))
-    #     self.assertEqual(value, bd.__get__(bd, api.BaseData()))
-
     @cases(['first_test', 23])
     def test_valid(self, value):
         bd = api.BaseData()
